@@ -1,0 +1,4 @@
+# file: /Users/willieliao/工作/JCID/Score and term grade/Comments generator/src/extractors.py
+# hypothesis_version: 6.150.0
+
+['/', 'a', 'data-original-title', 'data-student', 'data-student-name', 'h4', 'href', 'span', 'student-name', 'task-panel', 'title']

@@ -1,0 +1,4 @@
+# file: /Users/willieliao/工作/JCID/Score and term grade/Comments generator/src/scraper.py
+# hypothesis_version: 6.150.0
+
+['/classes/(\\d+)', '/gradebook/', '/gradebook/(\\d+)', '/myp-term-grades/', '/terms/(\\d+)', 'Extracting scores...', 'Extracting tasks...', 'lxml', 'unknown_class', 'unknown_term']

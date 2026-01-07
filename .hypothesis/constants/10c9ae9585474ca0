@@ -1,0 +1,4 @@
+# file: /Users/willieliao/工作/JCID/Score and term grade/Comments generator/src/extractors.py
+# hypothesis_version: 6.150.0
+
+['-', '/', 'A', 'B', 'C', 'D', 'N/A', 'NA', '[A-D]\\s*(\\d+)', 'a', 'class', 'comment', 'data-bs-content', 'data-criterion', 'data-original-title', 'data-student', 'data-student-name', 'data-task', 'gradebook-grades', 'h4', 'href', 'item', 'span', 'student-name', 'task-panel', 'title']

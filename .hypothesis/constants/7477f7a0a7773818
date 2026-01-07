@@ -1,0 +1,4 @@
+# file: /Users/willieliao/工作/JCID/Score and term grade/Comments generator/src/excel_exporter.py
+# hypothesis_version: 6.150.0
+
+['%Y%m%d_%H%M%S', 'Gradebook', 'ManageBac Scraper', 'N/A', 'Student Name', 'Term Grade', '[^\\w\\-]', '_', '_+', 'center', 'unknown']
