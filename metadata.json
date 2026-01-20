@@ -1,0 +1,5 @@
+{
+  "name": "TermGenius - Student Report Assistant",
+  "description": "An AI-powered assistant that reads Excel grade files, interprets 1-8 scores, and generates professional student term summaries using Google Gemini.",
+  "requestFramePermissions": []
+}
