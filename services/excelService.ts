@@ -62,31 +62,103 @@ export const parseExcelFile = async (file: File): Promise<Student[]> => {
           let totalScore = 0;
           let scoreCount = 0;
           const contextParts: string[] = [];
+          const criteriaScores: any = {};
+          let classroomBehaviour = '';
+          let learningAttitude = '';
+          let submissionQuality = '';
+          let submissionPunctuality = '';
+          let progress = '';
+          let personalNote = '';
+
+          // Track which columns we've processed as comments
+          const processedAsComment = new Set<number>();
 
           for (let c = 0; c < row.length; c++) {
               if (c === nameIndex) continue; // Skip name col
+              if (processedAsComment.has(c)) continue; // Skip if already processed as comment
               
               const header = headers[c] || `Column ${c}`;
               const cellVal = row[c];
               
               if (cellVal === undefined || cellVal === null || cellVal === '') continue;
 
-              // Check if it's likely a score
-              // Logic: explicitly matches score keywords OR is a short header (like "A", "B", "Crit A") AND value is numeric
+              const headerLower = header.toLowerCase();
+
+              // Check for specific fields with exact matching
+              if (/classroom.*behavio?u?r|behavio?u?r.*classroom/i.test(headerLower)) {
+                  classroomBehaviour = String(cellVal);
+                  contextParts.push(`Classroom Behaviour: ${cellVal}`);
+                  continue;
+              }
+              if (/learning.*attitude|attitude.*learning/i.test(headerLower)) {
+                  learningAttitude = String(cellVal);
+                  contextParts.push(`Learning Attitude: ${cellVal}`);
+                  continue;
+              }
+              if (/submission.*quality|quality.*submission/i.test(headerLower)) {
+                  submissionQuality = String(cellVal);
+                  contextParts.push(`Submission Quality: ${cellVal}`);
+                  continue;
+              }
+              if (/submission.*punctuality|punctuality.*submission/i.test(headerLower)) {
+                  submissionPunctuality = String(cellVal);
+                  contextParts.push(`Submission Punctuality: ${cellVal}`);
+                  continue;
+              }
+              if (/^progress$/i.test(headerLower)) {
+                  progress = String(cellVal);
+                  contextParts.push(`Progress: ${cellVal}`);
+                  continue;
+              }
+              if (/personal.*note|note.*personal/i.test(headerLower)) {
+                  personalNote = String(cellVal);
+                  contextParts.push(`Personal Note: ${cellVal}`);
+                  continue;
+              }
+
+              // Check if it's a criterion score (A, B, C, D or variations)
+              const criterionMatch = headerLower.match(/^(?:criterion\s*)?([a-d])(?:\s*score)?$/i);
+              if (criterionMatch) {
+                  const criterionLetter = criterionMatch[1].toUpperCase();
+                  const valNum = parseFloat(cellVal);
+                  
+                  if (!isNaN(valNum)) {
+                      if (valNum <= 10 && valNum > 0) { 
+                          totalScore += valNum;
+                          scoreCount++;
+                      }
+                      
+                      // Look for corresponding comment column
+                      let comment = '';
+                      if (c + 1 < row.length) {
+                          const nextVal = row[c + 1];
+                          const nextHeader = (headers[c + 1] || '').toLowerCase();
+                          // Check if next column is a comment for this criterion
+                          if (nextVal && (nextHeader.includes('comment') || nextHeader.includes(criterionLetter.toLowerCase()))) {
+                              comment = String(nextVal);
+                              processedAsComment.add(c + 1);
+                          }
+                      }
+                      
+                      criteriaScores[criterionLetter] = { score: valNum, comment };
+                      contextParts.push(`Criterion ${criterionLetter}: ${valNum}${comment ? ` - ${comment}` : ''}`);
+                  }
+                  continue;
+              }
+
+              // Generic score handling for other patterns
               let valNum = parseFloat(cellVal);
               const isNumeric = !isNaN(valNum) && typeof cellVal !== 'boolean';
               const isScoreLikeHeader = isScoreHeader(header);
 
-              if (isNumeric && (isScoreLikeHeader || (valNum >= 1 && valNum <= 8))) {
-                  // It's a score
-                  // Only average it if it seems to be on the 1-8 scale (or reasonable criterion scale 1-10)
-                  if (valNum <= 10 && valNum > 0) { 
+              if (isNumeric && isScoreLikeHeader && (valNum >= 1 && valNum <= 10)) {
+                  if (valNum > 0) { 
                       totalScore += valNum;
                       scoreCount++;
                   }
                   contextParts.push(`${header}: ${valNum}`);
-              } else {
-                  // It's likely a comment or text data
+              } else if (!isNumeric && !processedAsComment.has(c)) {
+                  // It's likely a general comment or text data
                   contextParts.push(`${header}: ${cellVal}`);
               }
           }
@@ -97,7 +169,14 @@ export const parseExcelFile = async (file: File): Promise<Student[]> => {
                id: crypto.randomUUID(),
                name,
                score: avgScore,
-               originalComments: contextParts.join('\n'), // Pass full context (Criterion A: 6, Comment: ...) to LLM
+               criteriaScores,
+               classroomBehaviour,
+               learningAttitude,
+               submissionQuality,
+               submissionPunctuality,
+               progress,
+               personalNote,
+               originalComments: contextParts.join('\n\n'),
                generatedSummary: '',
                status: 'idle'
           });

@@ -2,6 +2,13 @@ export interface Student {
   id: string;
   name: string;
   score: number; // 1-8
+  criteriaScores?: Record<string, { score: number; comment: string }>;
+  classroomBehaviour?: string;
+  learningAttitude?: string;
+  submissionQuality?: string;
+  submissionPunctuality?: string;
+  progress?: string;
+  personalNote?: string;
   originalComments: string;
   generatedSummary: string;
   status: 'idle' | 'generating' | 'completed' | 'error';

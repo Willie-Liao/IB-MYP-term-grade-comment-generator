@@ -68,11 +68,11 @@ export const StudentList: React.FC<StudentListProps> = ({ students, onRegenerate
                   </div>
                 </td>
                 <td className="p-4 align-top">
-                    <p className="text-sm text-slate-600 italic leading-relaxed whitespace-pre-line">"{student.originalComments}"</p>
+                    <p className="text-sm text-slate-600 italic leading-relaxed whitespace-pre-line max-h-[200px] overflow-y-auto">"{student.originalComments}"</p>
                 </td>
                 <td className="p-4 align-top relative">
-                   <div className={`min-h-[80px] rounded-lg p-3 text-sm leading-relaxed transition-colors ${
-                       student.status === 'completed' ? 'bg-blue-50/30 text-slate-800 border border-blue-100' : 
+                   <div className={`min-h-[80px] max-h-[200px] overflow-y-auto rounded-lg p-3 text-sm leading-relaxed transition-colors ${
+                       student.status === 'completed' ? 'bg-blue-50/100 text-slate-800 border border-blue-100' : 
                        student.status === 'error' ? 'bg-red-50 text-red-600 border border-red-100' :
                        'bg-slate-50 text-slate-400 border border-slate-100 flex items-center justify-center'
                    }`}>

@@ -63,20 +63,28 @@ const buildUnitContextParts = async (units: Unit[]): Promise<any[]> => {
       parts.push({ text: `Criterion ${key} Configuration (Task details for ${key}):\n  - Teacher Notes: ${crit.notes || "None"}\n` });
 
       if (crit.file) {
+        console.log(`Processing file for Criterion ${key}:`, crit.file.name, crit.file.type, crit.file.size);
+        
         if (crit.file.type === 'application/pdf') {
           parts.push({ text: `  - Task Clarification File for Criterion ${key} is attached below (PDF).\n` });
           try {
              const filePart = await fileToPart(crit.file);
              parts.push(filePart);
-          } catch (e) {
-             parts.push({ text: `  - [Error reading PDF file: ${crit.file.name}]\n` });
+             console.log(`Successfully processed PDF: ${crit.file.name}`);
+          } catch (e: any) {
+             console.error(`Error reading PDF file ${crit.file.name}:`, e);
+             parts.push({ text: `  - [Error reading PDF file: ${crit.file.name} - ${e.message}]\n` });
           }
         } else {
-          const content = await readFileContent(crit.file);
-          // Truncate text files if excessively long, though Flash handles 1M context.
-          // Let's keep it somewhat sane.
-          const truncated = content.length > 50000 ? content.substring(0, 50000) + "...(truncated)" : content;
-          parts.push({ text: `  - Task Clarification File Content: ${truncated}\n` });
+          try {
+            const content = await readFileContent(crit.file);
+            console.log(`Read file content length: ${content.length}`);
+            const truncated = content.length > 50000 ? content.substring(0, 50000) + "...(truncated)" : content;
+            parts.push({ text: `  - Task Clarification File Content: ${truncated}\n` });
+          } catch (e: any) {
+            console.error(`Error reading file ${crit.file.name}:`, e);
+            parts.push({ text: `  - [Error reading file: ${crit.file.name} - ${e.message}]\n` });
+          }
         }
       } else {
         parts.push({ text: `  - Task Clarification File Content: No file uploaded\n` });
@@ -175,9 +183,25 @@ export const generateStudentSummary = async (student: Student, details: ReportDe
       contents: contents,
     });
     return response.text || "Could not generate summary.";
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error generating summary:", error);
-    return "Error generating summary.";
+    
+    // Retry once on 503 errors
+    if (error.status === 503) {
+      console.log("Model overloaded, retrying in 2 seconds...");
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      try {
+        const retryResponse = await ai.models.generateContent({
+          model: MODEL_NAME,
+          contents: contents,
+        });
+        return retryResponse.text || "Could not generate summary.";
+      } catch (retryError: any) {
+        return `Error: Model is currently overloaded. Please try again in a few minutes.`;
+      }
+    }
+    
+    return `Error generating summary: ${error.message || "Unknown error"}`;
   }
 };
 
