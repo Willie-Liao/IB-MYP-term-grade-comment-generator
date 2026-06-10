@@ -11,14 +11,8 @@ export interface Student {
   personalNote?: string;
   originalComments: string;
   generatedSummary: string;
+  errorMessage?: string;
   status: 'idle' | 'generating' | 'completed' | 'error';
-}
-
-export interface ChatMessage {
-  id: string;
-  role: 'user' | 'model';
-  text: string;
-  timestamp: Date;
 }
 
 export enum ScoreMeaning {

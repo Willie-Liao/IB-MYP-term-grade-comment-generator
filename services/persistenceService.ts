@@ -126,6 +126,14 @@ const deserializeUnits = (units: SerializedUnit[]): Unit[] =>
     ) as Record<CriterionKey, Unit['criteria'][CriterionKey]>,
   }));
 
+const normalizeStudentStatus = (student: Student): Student => {
+  if (student.status !== 'generating') return student;
+  return {
+    ...student,
+    status: student.generatedSummary?.trim() ? 'completed' : 'idle',
+  };
+};
+
 export const loadSession = (): {
   students: Student[];
   units: Unit[];
@@ -140,7 +148,7 @@ export const loadSession = (): {
     if (data.version !== VERSION) return null;
 
     return {
-      students: data.students ?? [],
+      students: (data.students ?? []).map(normalizeStudentStatus),
       units: data.units?.length ? deserializeUnits(data.units) : createDefaultUnits(),
       activeFile: data.activeFile ?? null,
       showConfig: data.showConfig ?? true,
@@ -164,7 +172,7 @@ export const saveSession = async (session: {
 
   const payload: PersistedSession = {
     version: VERSION,
-    students: session.students,
+    students: session.students.map(normalizeStudentStatus),
     units: await serializeUnits(session.units),
     activeFile: session.activeFile,
     showConfig: session.showConfig,

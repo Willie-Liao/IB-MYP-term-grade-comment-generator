@@ -1,9 +1,3 @@
-## Hook: GitNexus code intelligence
-
-**Trigger:** (1) Any **file from this repository** is attached or @-mentioned, or (2) the user's question is about **code** in this repo — reading, understanding, modifying, debugging, refactoring, testing, or architecture.
-
-**Action:** Before answering or editing, use the **GitNexus MCP** server (`user-gitnexus`). Follow the rules in the block below. Prefer `query` and `context` over blind grepping; run `impact` before edits; run `detect_changes` before commits.
-
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 

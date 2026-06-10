@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { parseExcelFile } from './services/excelService';
-import { generateStudentSummary } from './services/geminiService';
+import { generateStudentSummary } from './services/minimaxService';
 import {
   clearSession,
   createDefaultUnits,
@@ -29,6 +29,8 @@ export default function App() {
   );
 
   useEffect(() => {
+    if (students.some((s) => s.status === 'generating')) return;
+
     const timer = setTimeout(() => {
       saveSession({ students, units, activeFile, showConfig }).then(() => {
         setHasSavedData(hasMeaningfulData({ students, units, activeFile }));
@@ -69,20 +71,60 @@ export default function App() {
   };
 
   const handleGenerateSingle = async (student: Student) => {
+    const studentId = student.id;
     setStudents((prev) =>
-      prev.map((s) => (s.id === student.id ? { ...s, status: 'generating' } : s))
+      prev.map((s) =>
+        s.id === studentId ? { ...s, status: 'generating', errorMessage: undefined } : s
+      )
     );
     try {
       const summary = await generateStudentSummary(student, {}, units);
+      const isError = summary.startsWith('Error generating summary:');
       setStudents((prev) =>
         prev.map((s) =>
-          s.id === student.id ? { ...s, status: 'completed', generatedSummary: summary } : s
+          s.id === studentId
+            ? {
+                ...s,
+                status: isError ? 'error' : 'completed',
+                generatedSummary: isError ? '' : summary,
+                errorMessage: isError ? summary : undefined,
+              }
+            : s
         )
       );
-    } catch {
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Failed to generate summary. Please try again.';
       setStudents((prev) =>
-        prev.map((s) => (s.id === student.id ? { ...s, status: 'error' } : s))
+        prev.map((s) =>
+          s.id === studentId
+            ? { ...s, status: 'error', generatedSummary: '', errorMessage: message }
+            : s
+        )
       );
+    }
+  };
+
+  const handleGenerateAll = async () => {
+    const pending = students.filter(
+      (s) => s.status === 'idle' || s.status === 'error' || !s.generatedSummary?.trim()
+    );
+    const targets =
+      pending.length > 0
+        ? pending
+        : students.filter((s) => s.status !== 'generating');
+
+    if (targets.length === 0) return;
+
+    if (pending.length === 0) {
+      const confirmed = window.confirm(
+        `Regenerate summaries for all ${targets.length} students? This may take several minutes.`
+      );
+      if (!confirmed) return;
+    }
+
+    for (const student of targets) {
+      await handleGenerateSingle(student);
     }
   };
 
@@ -169,6 +211,7 @@ export default function App() {
                 onSelectStudent={(student) => setSelectedStudentId(student.id)}
                 onGenerate={handleGenerateSingle}
                 onRegenerate={handleGenerateSingle}
+                onGenerateAll={handleGenerateAll}
               />
             </div>
           </div>

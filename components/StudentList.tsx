@@ -17,6 +17,7 @@ interface StudentListProps {
   onSelectStudent: (student: Student) => void;
   onGenerate: (student: Student) => void;
   onRegenerate: (student: Student) => void;
+  onGenerateAll: () => void;
 }
 
 const ScoreBadge: React.FC<{ score: number }> = ({ score }) => {
@@ -41,6 +42,7 @@ export const StudentList: React.FC<StudentListProps> = ({
   onSelectStudent,
   onGenerate,
   onRegenerate,
+  onGenerateAll,
 }) => {
   const [copied, setCopied] = React.useState(false);
 
@@ -49,6 +51,11 @@ export const StudentList: React.FC<StudentListProps> = ({
   const currentIndex = Math.max(0, students.findIndex((s) => s.id === selectedStudentId));
   const student = students[currentIndex];
   const completedCount = students.filter((s) => s.status === 'completed').length;
+  const isBulkGenerating = students.some((s) => s.status === 'generating');
+  const pendingCount = students.filter(
+    (s) => s.status === 'idle' || s.status === 'error' || !s.generatedSummary?.trim()
+  ).length;
+  const allComplete = pendingCount === 0;
 
   const goTo = (index: number) => {
     const next = students[index];
@@ -73,11 +80,30 @@ export const StudentList: React.FC<StudentListProps> = ({
   return (
     <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col h-full min-h-0">
       <div className="p-4 border-b border-slate-200 bg-slate-50 flex justify-between items-center gap-4 shrink-0">
-        <div>
-          <h2 className="text-lg font-semibold text-slate-800">Class List</h2>
-          <p className="text-sm text-slate-500">
-            Student {currentIndex + 1} of {students.length} · {completedCount} summaries complete
-          </p>
+        <div className="flex items-center gap-4 min-w-0">
+          <div className="min-w-0">
+            <h2 className="text-lg font-semibold text-slate-800">Class List</h2>
+            <p className="text-sm text-slate-500">
+              Student {currentIndex + 1} of {students.length} · {completedCount} summaries complete
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onGenerateAll}
+            disabled={isBulkGenerating}
+            className="shrink-0 inline-flex items-center gap-2.5 px-6 py-3 text-base font-bold text-white bg-gradient-to-r from-blue-600 to-indigo-600 rounded-xl shadow-lg shadow-blue-600/25 hover:from-blue-700 hover:to-indigo-700 hover:shadow-blue-700/30 disabled:opacity-60 disabled:cursor-not-allowed disabled:shadow-none transition-all"
+          >
+            {isBulkGenerating ? (
+              <Loader2 className="w-5 h-5 animate-spin" />
+            ) : (
+              <Sparkles className="w-5 h-5" />
+            )}
+            {isBulkGenerating
+              ? 'Generating...'
+              : allComplete
+                ? 'Regenerate All'
+                : `Generate All (${pendingCount})`}
+          </button>
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -173,9 +199,11 @@ export const StudentList: React.FC<StudentListProps> = ({
                 <span>Drafting summary...</span>
               </div>
             ) : student.status === 'error' ? (
-              <div className="flex items-center gap-2 text-red-600">
-                <AlertCircle className="w-5 h-5 shrink-0" />
-                <span>Failed to generate. Try again.</span>
+              <div className="flex items-start gap-2 text-red-600">
+                <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
+                <span className="text-sm leading-relaxed">
+                  {student.errorMessage || 'Failed to generate. Try again.'}
+                </span>
               </div>
             ) : student.generatedSummary ? (
               <p className="text-sm text-slate-800 leading-relaxed whitespace-pre-line">

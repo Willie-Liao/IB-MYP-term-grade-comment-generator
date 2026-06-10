@@ -111,7 +111,7 @@ export const UnitConfiguration: React.FC<UnitConfigurationProps> = ({ units, set
                     />
                     <label
                       htmlFor={isEnabled && !config.file ? `file-${unit.id}-${key}` : undefined}
-                      className={`flex flex-col items-center justify-center h-24 border-2 border-dashed rounded-lg transition-colors ${
+                      className={`relative flex flex-col items-center justify-center h-24 border-2 border-dashed rounded-lg transition-colors ${
                         isEnabled
                           ? config.file 
                             ? 'border-blue-300 bg-blue-50'
@@ -120,7 +120,7 @@ export const UnitConfiguration: React.FC<UnitConfigurationProps> = ({ units, set
                       }`}
                     >
                       {config.file ? (
-                        <div className="text-center px-2 relative w-full">
+                        <div className="text-center px-2 w-full">
                           <FileText className={`w-6 h-6 mx-auto mb-1 ${isEnabled ? 'text-blue-600' : 'text-slate-400'}`} />
                           <p className={`text-xs truncate max-w-[120px] mx-auto ${isEnabled ? 'text-slate-600' : 'text-slate-400'}`}>
                             {config.file.name}
@@ -133,7 +133,7 @@ export const UnitConfiguration: React.FC<UnitConfigurationProps> = ({ units, set
                                 e.stopPropagation();
                                 updateCriterion(unit.id, key, { file: null });
                               }}
-                              className="absolute -top-1 -right-1 p-1 bg-red-100 hover:bg-red-200 rounded-full text-red-600 hover:text-red-700 transition-colors"
+                              className="absolute top-1 right-1 p-1 bg-red-100 hover:bg-red-200 rounded-full text-red-600 hover:text-red-700 transition-colors"
                               title="Remove file"
                             >
                               <X className="w-4 h-4" />
