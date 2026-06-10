@@ -47,6 +47,12 @@ const getBaseUrl = () =>
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+/** Use parenthetical nickname when present, e.g. "Chen, Lin-en (Linda)" → "Linda". */
+const getStudentGreetingName = (fullName: string): string => {
+  const nicknameMatch = fullName.match(/\(([^)]+)\)\s*$/);
+  return nicknameMatch ? nicknameMatch[1].trim() : fullName.trim();
+};
+
 const mergeTextParts = (
   parts: ChatContentPart[]
 ): { text: string; truncated: boolean; rawLength: number } => {
@@ -359,72 +365,67 @@ export const generateStudentSummary = async (
     ? formatTeacherObservationsForPrompt(observations)
     : null;
 
+  const greetingName = getStudentGreetingName(student.name);
+
   const promptText = `
     Role: You are a teacher writing a personal report card comment for a student.
-    
-    GRADING SCALE CONTEXT (1-8):
-    8: Exceptional
-    7: Excellent
-    6: Very Good
-    5: Good
-    4: Satisfactory
-    3: Needs Improvement
-    2: Poor
-    1: Very Poor
+
+    GRADING SCALE CONTEXT (1-8) — for your interpretation only; do NOT cite scores or labels in the comment:
+    8: Exceptional | 7: Excellent | 6: Very Good | 5: Good | 4: Satisfactory | 3: Needs Improvement | 2: Poor | 1: Very Poor
 
     Student Data from Excel File:
-    - Name: ${student.name}
-    - Overall Score: ${student.score}
-    - Detailed Assessment Data (criterion scores and task comments from the gradebook):
+    - Full name: ${student.name}
+    - Overall Score: ${student.score} (internal reference only — never state this number or a grade label in the output)
+    - Summative task comments from the gradebook:
       ${student.originalComments}
-    
+
     ${
       teacherObservationBlock
         ? `${teacherObservationBlock}
     `
         : ""
     }
-    
-    CORE INSTRUCTION:
-    You must combine the gradebook assessment data with the teacher observation ratings and the 'ACADEMIC UNIT CONTEXT' (provided below).
-    
+
+    ROLE OF ACADEMIC UNIT CONTEXT (provided below):
+    - Use unit rubrics and task clarifications ONLY as background to understand what teachers meant in the summative comments.
+    - Map gradebook feedback to unit tasks internally; never mention criteria (A/B/C/D), rubrics, units, or assessment structure in the output.
+
     LOGIC STEPS:
-    1. Read criterion scores and task comments from the gradebook data above.
-    2. Scan for mentions of Criteria (e.g., "Criterion A: 6", "Crit B: 5") and map each to the 'Task Clarification' in the Unit Context.
-       - IF Student got a 7 in Criterion A, AND Criterion A was about "Essay Writing", THEN describe how their essay writing was "Excellent" using specific terms from the task file.
-    3. Weave teacher observation ratings (behaviour, attitude, submission quality, punctuality, progress) naturally into the narrative using the descriptive labels for each rated level — do NOT quote numeric ratings directly.
-    4. If specific criteria scores are missing, rely on the Overall Score and available data.
+    1. Read summative task comments from the gradebook; use unit context silently to interpret them.
+    2. Paragraph 1 draws ONLY from summative feedback — not from teacher observation ratings.
+    3. Paragraph 2 draws ONLY from teacher observation ratings (and extra comments if provided).
+    4. Paragraph 3 is the conclusion — do not repeat details from paragraphs 1 or 2.
 
     FORMATTING RULES (STRICT):
     1. Address the student directly using "you".
-    2. Start the comment EXACTLY with: "${student.name}, " (name followed by comma and space, NO line break after).
-    3. Continue on the SAME LINE after the name - do NOT wrap to a new line.
-    4. Structure the output in TWO distinct paragraphs SEPARATED BY A BLANK LINE:
-    
-       PARAGRAPH 1 - SYNTHESIZED PERFORMANCE NARRATIVE:
-       - Begins immediately after "${student.name}, " on the same line
-       - DO NOT list individual scores or criteria one by one
-       - DO NOT write "In Criterion A you scored X, in Criterion B you scored Y"
-       - INSTEAD: Distill and synthesize the key themes from all the data into a cohesive narrative
-       - Identify 2-3 KEY STRENGTHS or patterns across the criteria and describe them holistically
-       - Weave in behavioural observations (punctuality, attitude, behaviour) naturally, not as separate bullet points
-       - Focus on the ESSENCE of their performance, not a checklist
-       - Example of BAD: "You scored 6 in Criterion A for analysis. You scored 5 in Criterion B for communication."
-       - Example of GOOD: "Your analytical thinking shone through this term, particularly in how you approached complex problems with clarity and depth."
-       
-       [MANDATORY BLANK LINE HERE - This is the ONLY line break in the entire comment]
-       
-       PARAGRAPH 2 - TERM SUMMARY & FORWARD-LOOKING:
-       - This paragraph must stand INDEPENDENTLY - it should make sense even if read alone
-       - Start with an overall term performance statement (e.g., "Overall, this has been a strong/solid/challenging term...")
-       - Briefly mention the overall achievement level without repeating paragraph 1 details
-       - Include 1-2 specific, actionable forward-looking comments or goals for next term
-       - End with genuine encouragement that feels personal, not generic
-       - This paragraph should feel like a conclusion and a bridge to the future
-    
+    2. Start EXACTLY with: "${greetingName}, " (comma and space, NO line break after the name).
+    3. Continue on the SAME LINE after the name.
+    4. Exactly THREE paragraphs separated by ONE blank line each. No other line breaks.
+    5. Target length: ~260–320 words total (~85–110 words per paragraph). Substantive but not an essay.
+
+    PARAGRAPH 1 — ACADEMIC SYNTHESIS (summative comments only):
+    - Paint a learning portrait of the student this term, naming 2–3 traits or habits of mind (e.g. thoroughness, self-awareness, persistence, creativity).
+    - Distill patterns across summative feedback; do NOT list tasks or recite teacher comments.
+    - NEVER mention criteria, scores, numbers, or grade labels (Excellent, Exceptional, etc.).
+    - At most ONE brief task reference, only if it clearly strengthens the portrait — otherwise stay abstract.
+    - Example BAD: "In Criterion B your planning dossier scored highly and Criterion C was strong."
+    - Example GOOD: "You approached the unit with unusual thoroughness and honest self-reflection, turning careful preparation into confident, controlled performance."
+
+    PARAGRAPH 2 — TEACHER OBSERVATIONS:
+    - Draw only from teacher observation ratings above; use soft phrasing for work habits, attitude, and reliability — not a checklist of aspect labels.
+    - Do NOT quote numeric ratings (1–4).
+    - If Extra Comments are provided, polish and weave them in naturally — never paste verbatim.
+    - If no teacher observations were rated and no extra comments exist, write a brief, warm paragraph about general engagement based on what the summative comments imply about the student's approach — still without aspect labels.
+    - Balance length with paragraph 1.
+
+    PARAGRAPH 3 — CONCLUSION:
+    - Brief overall term statement (no scores or numbers).
+    - One specific, actionable goal for next term.
+    - End with genuine, personal encouragement.
+
     DIVERSITY REQUIREMENT:
     - Even if multiple students have similar data, write UNIQUE comments with varied vocabulary and sentence structures.
-    
+
     Tone: Professional, personal, constructive, and encouraging.
   `;
 
