@@ -16,7 +16,22 @@ interface MinimaxError {
   baseCode?: number;
   message: string;
   retryable: boolean;
+  cancelled?: boolean;
 }
+
+export class GenerationCancelledError extends Error {
+  constructor() {
+    super("Generation cancelled");
+    this.name = "GenerationCancelledError";
+  }
+}
+
+const isCancelledError = (error: unknown): boolean =>
+  error instanceof GenerationCancelledError ||
+  (typeof error === "object" &&
+    error !== null &&
+    "cancelled" in error &&
+    (error as MinimaxError).cancelled === true);
 
 interface ReportDetails {
   behavior?: string;
@@ -159,7 +174,10 @@ const buildUnitContextParts = async (units: Unit[]): Promise<ChatContentPart[]> 
   return parts;
 };
 
-const callMinimaxOnce = async (content: ChatContentPart[]): Promise<string> => {
+const callMinimaxOnce = async (
+  content: ChatContentPart[],
+  externalSignal?: AbortSignal
+): Promise<string> => {
   if (!useDevProxy() && !getApiKey()) {
     throw new Error("MINIMAX_API_KEY is not set. Add it to your .env file.");
   }
@@ -171,6 +189,8 @@ const callMinimaxOnce = async (content: ChatContentPart[]): Promise<string> => {
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const abortFromExternal = () => controller.abort();
+  externalSignal?.addEventListener("abort", abortFromExternal);
 
   let response: Response;
   try {
@@ -187,6 +207,9 @@ const callMinimaxOnce = async (content: ChatContentPart[]): Promise<string> => {
       }),
     });
   } catch (error: any) {
+    if (externalSignal?.aborted) {
+      throw new GenerationCancelledError();
+    }
     if (error?.name === "AbortError") {
       throw {
         message: `Request timed out after ${REQUEST_TIMEOUT_MS / 1000}s`,
@@ -199,6 +222,7 @@ const callMinimaxOnce = async (content: ChatContentPart[]): Promise<string> => {
     };
   } finally {
     clearTimeout(timeoutId);
+    externalSignal?.removeEventListener("abort", abortFromExternal);
   }
 
   const data = await response.json().catch(() => ({}));
@@ -229,14 +253,20 @@ const callMinimaxOnce = async (content: ChatContentPart[]): Promise<string> => {
   return text;
 };
 
-const callMinimax = async (content: ChatContentPart[]): Promise<string> => {
+const callMinimax = async (content: ChatContentPart[], signal?: AbortSignal): Promise<string> => {
   const maxAttempts = 3;
   let lastError: MinimaxError | null = null;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    if (signal?.aborted) throw new GenerationCancelledError();
+
     try {
-      return await callMinimaxOnce(content);
+      return await callMinimaxOnce(content, signal);
     } catch (error: any) {
+      if (isCancelledError(error) || signal?.aborted) {
+        throw new GenerationCancelledError();
+      }
+
       const parsed: MinimaxError =
         error?.message && typeof error.retryable === "boolean"
           ? error
@@ -260,9 +290,13 @@ const callMinimax = async (content: ChatContentPart[]): Promise<string> => {
 export const generateStudentSummary = async (
   student: Student,
   details: ReportDetails = {},
-  units: Unit[] = []
+  units: Unit[] = [],
+  options?: { signal?: AbortSignal }
 ): Promise<string> => {
+  if (options?.signal?.aborted) throw new GenerationCancelledError();
+
   const unitContextParts = await buildUnitContextParts(units);
+  if (options?.signal?.aborted) throw new GenerationCancelledError();
 
   const promptText = `
     Role: You are a teacher writing a personal report card comment for a student.
@@ -342,8 +376,11 @@ export const generateStudentSummary = async (
   const content: ChatContentPart[] = [{ type: "text", text: promptText }, ...unitContextParts];
 
   try {
-    return await callMinimax(content);
+    return await callMinimax(content, options?.signal);
   } catch (error: any) {
+    if (isCancelledError(error) || options?.signal?.aborted) {
+      throw new GenerationCancelledError();
+    }
     console.error("Error generating summary:", error);
     const message = error?.message || "Unknown error";
     if (error?.retryable) {

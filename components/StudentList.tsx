@@ -9,6 +9,7 @@ import {
   Loader2,
   RefreshCw,
   Sparkles,
+  Square,
 } from 'lucide-react';
 
 interface StudentListProps {
@@ -18,6 +19,7 @@ interface StudentListProps {
   onGenerate: (student: Student) => void;
   onRegenerate: (student: Student) => void;
   onGenerateAll: () => void;
+  isBulkRunning: boolean;
 }
 
 const ScoreBadge: React.FC<{ score: number }> = ({ score }) => {
@@ -43,6 +45,7 @@ export const StudentList: React.FC<StudentListProps> = ({
   onGenerate,
   onRegenerate,
   onGenerateAll,
+  isBulkRunning,
 }) => {
   const [copied, setCopied] = React.useState(false);
 
@@ -51,7 +54,7 @@ export const StudentList: React.FC<StudentListProps> = ({
   const currentIndex = Math.max(0, students.findIndex((s) => s.id === selectedStudentId));
   const student = students[currentIndex];
   const completedCount = students.filter((s) => s.status === 'completed').length;
-  const isBulkGenerating = students.some((s) => s.status === 'generating');
+  const isStudentGenerating = student.status === 'generating';
   const pendingCount = students.filter(
     (s) => s.status === 'idle' || s.status === 'error' || !s.generatedSummary?.trim()
   ).length;
@@ -70,6 +73,10 @@ export const StudentList: React.FC<StudentListProps> = ({
   };
 
   const handleAction = () => {
+    if (isStudentGenerating) {
+      onGenerate(student);
+      return;
+    }
     if (student.generatedSummary || student.status === 'completed') {
       onRegenerate(student);
     } else {
@@ -90,16 +97,19 @@ export const StudentList: React.FC<StudentListProps> = ({
           <button
             type="button"
             onClick={onGenerateAll}
-            disabled={isBulkGenerating}
-            className="shrink-0 inline-flex items-center gap-2.5 px-6 py-3 text-base font-bold text-white bg-gradient-to-r from-blue-600 to-indigo-600 rounded-xl shadow-lg shadow-blue-600/25 hover:from-blue-700 hover:to-indigo-700 hover:shadow-blue-700/30 disabled:opacity-60 disabled:cursor-not-allowed disabled:shadow-none transition-all"
+            className={`shrink-0 inline-flex items-center gap-2.5 px-6 py-3 text-base font-bold text-white rounded-xl shadow-lg transition-all ${
+              isBulkRunning
+                ? 'bg-red-600 hover:bg-red-700 shadow-red-600/25 hover:shadow-red-700/30'
+                : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-blue-600/25 hover:shadow-blue-700/30'
+            }`}
           >
-            {isBulkGenerating ? (
-              <Loader2 className="w-5 h-5 animate-spin" />
+            {isBulkRunning ? (
+              <Square className="w-5 h-5 fill-current" />
             ) : (
               <Sparkles className="w-5 h-5" />
             )}
-            {isBulkGenerating
-              ? 'Generating...'
+            {isBulkRunning
+              ? 'Stop All'
               : allComplete
                 ? 'Regenerate All'
                 : `Generate All (${pendingCount})`}
@@ -173,21 +183,20 @@ export const StudentList: React.FC<StudentListProps> = ({
               )}
               <button
                 onClick={handleAction}
-                disabled={student.status === 'generating'}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white rounded-lg transition-colors ${
+                  isStudentGenerating
+                    ? 'bg-red-600 hover:bg-red-700'
+                    : 'bg-blue-600 hover:bg-blue-700'
+                }`}
               >
-                {student.status === 'generating' ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
+                {isStudentGenerating ? (
+                  <Square className="w-4 h-4 fill-current" />
                 ) : student.generatedSummary ? (
                   <RefreshCw className="w-4 h-4" />
                 ) : (
                   <Sparkles className="w-4 h-4" />
                 )}
-                {student.status === 'generating'
-                  ? 'Generating...'
-                  : student.generatedSummary
-                    ? 'Regenerate'
-                    : 'Generate'}
+                {isStudentGenerating ? 'Stop' : student.generatedSummary ? 'Regenerate' : 'Generate'}
               </button>
             </div>
           </div>

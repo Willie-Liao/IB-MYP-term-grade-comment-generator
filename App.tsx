@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { parseExcelFile } from './services/excelService';
-import { generateStudentSummary } from './services/minimaxService';
+import { GenerationCancelledError, generateStudentSummary } from './services/minimaxService';
 import {
   clearSession,
   createDefaultUnits,
@@ -27,6 +27,40 @@ export default function App() {
   const [hasSavedData, setHasSavedData] = useState(
     () => saved !== null && hasMeaningfulData(saved)
   );
+  const [isBulkRunning, setIsBulkRunning] = useState(false);
+  const abortControllersRef = useRef<Map<string, AbortController>>(new Map());
+  const bulkCancelledRef = useRef(false);
+
+  const statusAfterCancel = (student: Student): Student['status'] =>
+    student.generatedSummary?.trim() ? 'completed' : 'idle';
+
+  const stopAllGeneration = () => {
+    bulkCancelledRef.current = true;
+    setIsBulkRunning(false);
+    for (const controller of abortControllersRef.current.values()) {
+      controller.abort();
+    }
+    abortControllersRef.current.clear();
+    setStudents((prev) =>
+      prev.map((s) =>
+        s.status === 'generating'
+          ? { ...s, status: statusAfterCancel(s), errorMessage: undefined }
+          : s
+      )
+    );
+  };
+
+  const stopStudentGeneration = (studentId: string) => {
+    abortControllersRef.current.get(studentId)?.abort();
+    abortControllersRef.current.delete(studentId);
+    setStudents((prev) =>
+      prev.map((s) =>
+        s.id === studentId && s.status === 'generating'
+          ? { ...s, status: statusAfterCancel(s), errorMessage: undefined }
+          : s
+      )
+    );
+  };
 
   useEffect(() => {
     if (students.some((s) => s.status === 'generating')) return;
@@ -70,15 +104,19 @@ export default function App() {
     setHasSavedData(false);
   };
 
-  const handleGenerateSingle = async (student: Student) => {
+  const handleGenerateSingle = async (student: Student, signal: AbortSignal) => {
     const studentId = student.id;
+    if (signal.aborted) return;
+
     setStudents((prev) =>
       prev.map((s) =>
         s.id === studentId ? { ...s, status: 'generating', errorMessage: undefined } : s
       )
     );
     try {
-      const summary = await generateStudentSummary(student, {}, units);
+      const summary = await generateStudentSummary(student, {}, units, { signal });
+      if (signal.aborted) return;
+
       const isError = summary.startsWith('Error generating summary:');
       setStudents((prev) =>
         prev.map((s) =>
@@ -93,6 +131,8 @@ export default function App() {
         )
       );
     } catch (error) {
+      if (error instanceof GenerationCancelledError || signal.aborted) return;
+
       const message =
         error instanceof Error ? error.message : 'Failed to generate summary. Please try again.';
       setStudents((prev) =>
@@ -102,10 +142,28 @@ export default function App() {
             : s
         )
       );
+    } finally {
+      abortControllersRef.current.delete(studentId);
     }
   };
 
+  const toggleGenerateSingle = (student: Student) => {
+    if (student.status === 'generating') {
+      stopStudentGeneration(student.id);
+      return;
+    }
+
+    const controller = new AbortController();
+    abortControllersRef.current.set(student.id, controller);
+    void handleGenerateSingle(student, controller.signal);
+  };
+
   const handleGenerateAll = async () => {
+    if (isBulkRunning) {
+      stopAllGeneration();
+      return;
+    }
+
     const pending = students.filter(
       (s) => s.status === 'idle' || s.status === 'error' || !s.generatedSummary?.trim()
     );
@@ -123,8 +181,25 @@ export default function App() {
       if (!confirmed) return;
     }
 
-    for (const student of targets) {
-      await handleGenerateSingle(student);
+    bulkCancelledRef.current = false;
+    setIsBulkRunning(true);
+
+    const BATCH_SIZE = 5;
+    try {
+      for (let i = 0; i < targets.length; i += BATCH_SIZE) {
+        if (bulkCancelledRef.current) break;
+
+        const batch = targets.slice(i, i + BATCH_SIZE);
+        await Promise.all(
+          batch.map((student) => {
+            const controller = new AbortController();
+            abortControllersRef.current.set(student.id, controller);
+            return handleGenerateSingle(student, controller.signal);
+          })
+        );
+      }
+    } finally {
+      setIsBulkRunning(false);
     }
   };
 
@@ -209,9 +284,10 @@ export default function App() {
                 students={students}
                 selectedStudentId={selectedStudentId}
                 onSelectStudent={(student) => setSelectedStudentId(student.id)}
-                onGenerate={handleGenerateSingle}
-                onRegenerate={handleGenerateSingle}
+                onGenerate={toggleGenerateSingle}
+                onRegenerate={toggleGenerateSingle}
                 onGenerateAll={handleGenerateAll}
+                isBulkRunning={isBulkRunning}
               />
             </div>
           </div>
