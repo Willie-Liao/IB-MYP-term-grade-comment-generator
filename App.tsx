@@ -8,7 +8,7 @@ import {
   loadSession,
   saveSession,
 } from './services/persistenceService';
-import { Student, Unit } from './types';
+import { Student, TeacherObservations, Unit } from './types';
 import { FileUpload } from './components/FileUpload';
 import { StudentList } from './components/StudentList';
 import { UnitConfiguration } from './components/UnitConfiguration';
@@ -114,7 +114,12 @@ export default function App() {
       )
     );
     try {
-      const summary = await generateStudentSummary(student, {}, units, { signal });
+      const summary = await generateStudentSummary(
+        student,
+        student.teacherObservations,
+        units,
+        { signal }
+      );
       if (signal.aborted) return;
 
       const isError = summary.startsWith('Error generating summary:');
@@ -156,6 +161,12 @@ export default function App() {
     const controller = new AbortController();
     abortControllersRef.current.set(student.id, controller);
     void handleGenerateSingle(student, controller.signal);
+  };
+
+  const updateStudentObservations = (studentId: string, observations: TeacherObservations) => {
+    setStudents((prev) =>
+      prev.map((s) => (s.id === studentId ? { ...s, teacherObservations: observations } : s))
+    );
   };
 
   const handleGenerateAll = async () => {
@@ -284,6 +295,7 @@ export default function App() {
                 students={students}
                 selectedStudentId={selectedStudentId}
                 onSelectStudent={(student) => setSelectedStudentId(student.id)}
+                onTeacherObservationsChange={updateStudentObservations}
                 onGenerate={toggleGenerateSingle}
                 onRegenerate={toggleGenerateSingle}
                 onGenerateAll={handleGenerateAll}

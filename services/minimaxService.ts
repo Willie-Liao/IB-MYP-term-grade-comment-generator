@@ -1,5 +1,9 @@
-import { Student, Unit, CriterionKey } from "../types";
+import { Student, TeacherObservations, Unit, CriterionKey } from "../types";
 import { extractDocumentText } from "./documentParserService";
+import { GenerationLogger, getLastGenerationLog } from "./generationLogService";
+
+export { getLastGenerationLog };
+import { formatTeacherObservationsForPrompt } from "./teacherObservationScales";
 
 const MODEL_NAME = "MiniMax-M3";
 const DEFAULT_BASE_URL = "https://api.minimaxi.com/v1";
@@ -34,15 +38,6 @@ const isCancelledError = (error: unknown): boolean =>
     "cancelled" in error &&
     (error as MinimaxError).cancelled === true);
 
-interface ReportDetails {
-  behavior?: string;
-  attitude?: string;
-  submissionQuality?: string;
-  punctuality?: string;
-  progress?: string;
-  extraComments?: string;
-}
-
 const getApiKey = () => process.env.MINIMAX_API_KEY?.trim() || "";
 const useDevProxy = () => import.meta.env.DEV;
 const getBaseUrl = () =>
@@ -52,19 +47,27 @@ const getBaseUrl = () =>
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-const mergeTextParts = (parts: ChatContentPart[]): string => {
+const mergeTextParts = (
+  parts: ChatContentPart[]
+): { text: string; truncated: boolean; rawLength: number } => {
+  const rawLength = parts
+    .filter((part): part is { type: "text"; text: string } => part.type === "text")
+    .map((part) => part.text)
+    .join("").length;
+
   let text = parts
     .filter((part): part is { type: "text"; text: string } => part.type === "text")
     .map((part) => part.text)
     .join("");
 
-  if (text.length > MAX_PROMPT_CHARS) {
+  const truncated = text.length > MAX_PROMPT_CHARS;
+  if (truncated) {
     text =
       text.slice(0, MAX_PROMPT_CHARS) +
       "\n\n[Prompt truncated — shorten unit files or teacher notes if results are incomplete.]";
   }
 
-  return text;
+  return { text, truncated, rawLength };
 };
 
 const extractAssistantText = (message: any): string => {
@@ -119,7 +122,10 @@ const readFileContent = async (file: File): Promise<string> => {
   }
 };
 
-const buildUnitContextParts = async (units: Unit[]): Promise<ChatContentPart[]> => {
+const buildUnitContextParts = async (
+  units: Unit[],
+  logger?: GenerationLogger
+): Promise<ChatContentPart[]> => {
   const parts: ChatContentPart[] = [];
 
   if (!units || units.length === 0) {
@@ -130,11 +136,21 @@ const buildUnitContextParts = async (units: Unit[]): Promise<ChatContentPart[]> 
   parts.push({ type: "text", text: "ACADEMIC UNIT CONTEXT (The Course Material):\n" });
 
   for (const unit of units) {
-    parts.push({ type: "text", text: `\n=== Unit: ${unit.title || "Untitled Unit"} ===\n` });
+    const unitTitle = unit.title || "Untitled Unit";
+    parts.push({ type: "text", text: `\n=== Unit: ${unitTitle} ===\n` });
     for (const key of ["A", "B", "C", "D"] as CriterionKey[]) {
       const crit = unit.criteria[key];
       if (!crit.enabled) {
         parts.push({ type: "text", text: `Criterion ${key}: N/A (Not assessed in this unit)\n` });
+        logger?.logCriterionFile({
+          unitTitle,
+          criterion: key,
+          fileName: null,
+          mimeType: null,
+          status: "disabled",
+          extractedChars: 0,
+          sentChars: 0,
+        });
         continue;
       }
 
@@ -149,21 +165,62 @@ const buildUnitContextParts = async (units: Unit[]): Promise<ChatContentPart[]> 
             type: "text",
             text: `  - Task Clarification Image: ${crit.file.name} (use teacher notes — image bytes not sent)\n`,
           });
+          logger?.logCriterionFile({
+            unitTitle,
+            criterion: key,
+            fileName: crit.file.name,
+            mimeType: crit.file.type,
+            status: "image_only",
+            extractedChars: 0,
+            sentChars: 0,
+            detail: "Image bytes not sent to model",
+          });
         } else {
           try {
             const content = await readFileContent(crit.file);
-            const truncated =
-              content.length > 50000 ? content.substring(0, 50000) + "...(truncated)" : content;
-            parts.push({ type: "text", text: `  - Task Clarification File Content: ${truncated}\n` });
+            const parseFailed = content.startsWith("[Attached File:");
+            const fileTruncated = !parseFailed && content.length > 50000;
+            const sent =
+              fileTruncated ? content.substring(0, 50000) + "...(truncated)" : content;
+            parts.push({ type: "text", text: `  - Task Clarification File Content: ${sent}\n` });
+            logger?.logCriterionFile({
+              unitTitle,
+              criterion: key,
+              fileName: crit.file.name,
+              mimeType: crit.file.type || null,
+              status: parseFailed ? "error" : fileTruncated ? "truncated" : "parsed",
+              extractedChars: content.length,
+              sentChars: sent.length,
+              detail: parseFailed ? content : fileTruncated ? "Per-file cap 50k chars" : undefined,
+            });
           } catch (e: any) {
             parts.push({
               type: "text",
               text: `  - [Error reading file: ${crit.file.name} - ${e.message}]\n`,
             });
+            logger?.logCriterionFile({
+              unitTitle,
+              criterion: key,
+              fileName: crit.file.name,
+              mimeType: crit.file.type || null,
+              status: "error",
+              extractedChars: 0,
+              sentChars: 0,
+              detail: e.message,
+            });
           }
         }
       } else {
         parts.push({ type: "text", text: `  - Task Clarification File Content: No file uploaded\n` });
+        logger?.logCriterionFile({
+          unitTitle,
+          criterion: key,
+          fileName: null,
+          mimeType: null,
+          status: "missing",
+          extractedChars: 0,
+          sentChars: 0,
+        });
       }
     }
   }
@@ -196,7 +253,7 @@ const callMinimaxOnce = async (
       signal: controller.signal,
       body: JSON.stringify({
         model: MODEL_NAME,
-        messages: [{ role: "user", content: mergeTextParts(content) }],
+        messages: [{ role: "user", content: mergeTextParts(content).text }],
         temperature: 0.8,
         max_completion_tokens: 2048,
         thinking: { type: "disabled" },
@@ -285,14 +342,22 @@ const callMinimax = async (content: ChatContentPart[], signal?: AbortSignal): Pr
 
 export const generateStudentSummary = async (
   student: Student,
-  details: ReportDetails = {},
+  observations: TeacherObservations | undefined,
   units: Unit[] = [],
   options?: { signal?: AbortSignal }
 ): Promise<string> => {
   if (options?.signal?.aborted) throw new GenerationCancelledError();
 
-  const unitContextParts = await buildUnitContextParts(units);
-  if (options?.signal?.aborted) throw new GenerationCancelledError();
+  const logger = new GenerationLogger(student, MODEL_NAME);
+  const unitContextParts = await buildUnitContextParts(units, logger);
+  if (options?.signal?.aborted) {
+    logger.complete("cancelled");
+    throw new GenerationCancelledError();
+  }
+
+  const teacherObservationBlock = observations
+    ? formatTeacherObservationsForPrompt(observations)
+    : null;
 
   const promptText = `
     Role: You are a teacher writing a personal report card comment for a student.
@@ -310,30 +375,24 @@ export const generateStudentSummary = async (
     Student Data from Excel File:
     - Name: ${student.name}
     - Overall Score: ${student.score}
-    - Detailed Assessment Data (All columns from Excel including behaviour, attitude, submission quality, submission punctuality, progress, and extra comments):
+    - Detailed Assessment Data (criterion scores and task comments from the gradebook):
       ${student.originalComments}
     
     ${
-      Object.keys(details).length > 0
-        ? `Additional Teacher Interview Notes:
-    - Behaviour: ${details.behavior || "N/A"}
-    - Attitude: ${details.attitude || "N/A"}
-    - Submission Quality: ${details.submissionQuality || "N/A"}
-    - Submission Punctuality: ${details.punctuality || "N/A"}
-    - Progress: ${details.progress || "N/A"}
-    - Extra Comments: ${details.extraComments || "N/A"}
+      teacherObservationBlock
+        ? `${teacherObservationBlock}
     `
         : ""
     }
     
     CORE INSTRUCTION:
-    You must combine the 'Detailed Assessment Data' from the Excel file with the 'ACADEMIC UNIT CONTEXT' (provided above/below).
+    You must combine the gradebook assessment data with the teacher observation ratings and the 'ACADEMIC UNIT CONTEXT' (provided below).
     
     LOGIC STEPS:
-    1. Read ALL columns from the Excel data above - this includes behaviour, attitude, submission quality, submission punctuality, progress, and any extra comments.
+    1. Read criterion scores and task comments from the gradebook data above.
     2. Scan for mentions of Criteria (e.g., "Criterion A: 6", "Crit B: 5") and map each to the 'Task Clarification' in the Unit Context.
        - IF Student got a 7 in Criterion A, AND Criterion A was about "Essay Writing", THEN describe how their essay writing was "Excellent" using specific terms from the task file.
-    3. Integrate behavioural observations (behaviour, attitude, punctuality, progress) naturally into the narrative - these are already in the Excel data.
+    3. Weave teacher observation ratings (behaviour, attitude, submission quality, punctuality, progress) naturally into the narrative using the descriptive labels for each rated level — do NOT quote numeric ratings directly.
     4. If specific criteria scores are missing, rely on the Overall Score and available data.
 
     FORMATTING RULES (STRICT):
@@ -371,17 +430,56 @@ export const generateStudentSummary = async (
 
   const content: ChatContentPart[] = [{ type: "text", text: promptText }, ...unitContextParts];
 
+  const unitContextChars = unitContextParts
+    .filter((part): part is { type: "text"; text: string } => part.type === "text")
+    .map((part) => part.text)
+    .join("").length;
+
+  logger.addPromptSection({
+    id: "gradebook",
+    label: "Gradebook data (from Excel)",
+    chars: student.originalComments.length,
+    detail: `Student: ${student.name} | Term score: ${student.score}`,
+  });
+  logger.addPromptSection({
+    id: "teacher_observations",
+    label: "Teacher observation ratings (UI)",
+    chars: teacherObservationBlock?.length ?? 0,
+    detail: teacherObservationBlock ? "Included" : "Not rated / empty",
+  });
+  logger.addPromptSection({
+    id: "instructions",
+    label: "Instructions + formatting rules",
+    chars: promptText.length - (teacherObservationBlock?.length ?? 0) - student.originalComments.length,
+  });
+  logger.addPromptSection({
+    id: "unit_context",
+    label: "ACADEMIC UNIT CONTEXT (parsed rubrics)",
+    chars: unitContextChars,
+    detail: `${logger.run.files.filter((f) => f.status === "parsed" || f.status === "truncated").length} rubric file(s) embedded`,
+  });
+
+  const merged = mergeTextParts(content);
+  logger.setPromptTotals(merged.text.length, merged.truncated);
+
   try {
-    return await callMinimax(content, options?.signal);
+    const summary = await callMinimax(content, options?.signal);
+    logger.complete("success", { responseChars: summary.length });
+    return summary;
   } catch (error: any) {
     if (isCancelledError(error) || options?.signal?.aborted) {
+      logger.complete("cancelled");
       throw new GenerationCancelledError();
     }
     console.error("Error generating summary:", error);
     const message = error?.message || "Unknown error";
     if (error?.retryable) {
-      return `Error generating summary: ${message}. MiniMax returned a temporary server error — please try again.`;
+      const errText = `Error generating summary: ${message}. MiniMax returned a temporary server error — please try again.`;
+      logger.complete("error", { errorMessage: message });
+      return errText;
     }
-    return `Error generating summary: ${message}`;
+    const errText = `Error generating summary: ${message}`;
+    logger.complete("error", { errorMessage: message });
+    return errText;
   }
 };

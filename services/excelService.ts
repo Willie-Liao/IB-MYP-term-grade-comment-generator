@@ -185,12 +185,6 @@ const parseGenericRow = (
   let scoreCount = 0;
   const contextParts: string[] = [];
   const criteriaScores: Record<string, { score: number; comment: string }> = {};
-  let classroomBehaviour = '';
-  let learningAttitude = '';
-  let submissionQuality = '';
-  let submissionPunctuality = '';
-  let progress = '';
-  let personalNote = '';
   const processedAsComment = new Set<number>();
 
   for (let c = 0; c < row.length; c++) {
@@ -202,34 +196,11 @@ const parseGenericRow = (
 
     const headerLower = header.toLowerCase();
 
-    if (/classroom.*behavio?u?r|behavio?u?r.*classroom/i.test(headerLower)) {
-      classroomBehaviour = String(cellVal);
-      contextParts.push(`Classroom Behaviour: ${cellVal}`);
-      continue;
-    }
-    if (/learning.*attitude|attitude.*learning/i.test(headerLower)) {
-      learningAttitude = String(cellVal);
-      contextParts.push(`Learning Attitude: ${cellVal}`);
-      continue;
-    }
-    if (/submission.*quality|quality.*submission/i.test(headerLower)) {
-      submissionQuality = String(cellVal);
-      contextParts.push(`Submission Quality: ${cellVal}`);
-      continue;
-    }
-    if (/submission.*punctuality|punctuality.*submission/i.test(headerLower)) {
-      submissionPunctuality = String(cellVal);
-      contextParts.push(`Submission Punctuality: ${cellVal}`);
-      continue;
-    }
-    if (/^progress$/i.test(headerLower)) {
-      progress = String(cellVal);
-      contextParts.push(`Progress: ${cellVal}`);
-      continue;
-    }
-    if (/personal.*note|note.*personal/i.test(headerLower)) {
-      personalNote = String(cellVal);
-      contextParts.push(`Personal Note: ${cellVal}`);
+    if (
+      /classroom.*behavio?u?r|behavio?u?r.*classroom|learning.*attitude|attitude.*learning|submission.*quality|quality.*submission|submission.*punctuality|punctuality.*submission|^progress$|personal.*note|note.*personal/i.test(
+        headerLower
+      )
+    ) {
       continue;
     }
 
@@ -290,12 +261,6 @@ const parseGenericRow = (
     name,
     score: avgScore,
     criteriaScores,
-    classroomBehaviour,
-    learningAttitude,
-    submissionQuality,
-    submissionPunctuality,
-    progress,
-    personalNote,
     originalComments: contextParts.join('\n\n'),
     generatedSummary: '',
     status: 'idle',

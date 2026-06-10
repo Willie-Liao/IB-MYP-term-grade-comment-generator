@@ -1,14 +1,27 @@
+export type TeacherAspectKey =
+  | 'behavior'
+  | 'attitude'
+  | 'submissionQuality'
+  | 'punctuality'
+  | 'progress';
+
+export type AspectRating = 1 | 2 | 3 | 4;
+
+export interface TeacherObservations {
+  behavior: AspectRating | null;
+  attitude: AspectRating | null;
+  submissionQuality: AspectRating | null;
+  punctuality: AspectRating | null;
+  progress: AspectRating | null;
+  extraComments: string;
+}
+
 export interface Student {
   id: string;
   name: string;
   score: number; // 1-8
   criteriaScores?: Record<string, { score: number; comment: string }>;
-  classroomBehaviour?: string;
-  learningAttitude?: string;
-  submissionQuality?: string;
-  submissionPunctuality?: string;
-  progress?: string;
-  personalNote?: string;
+  teacherObservations?: TeacherObservations;
   originalComments: string;
   generatedSummary: string;
   errorMessage?: string;

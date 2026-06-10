@@ -1,5 +1,7 @@
 import React from 'react';
-import { Student } from '../types';
+import { Student, TeacherObservations } from '../types';
+import { createEmptyTeacherObservations } from '../services/teacherObservationScales';
+import { TeacherObservationsPanel } from './TeacherObservationsPanel';
 import {
   AlertCircle,
   Check,
@@ -16,6 +18,7 @@ interface StudentListProps {
   students: Student[];
   selectedStudentId: string | null;
   onSelectStudent: (student: Student) => void;
+  onTeacherObservationsChange: (studentId: string, observations: TeacherObservations) => void;
   onGenerate: (student: Student) => void;
   onRegenerate: (student: Student) => void;
   onGenerateAll: () => void;
@@ -42,6 +45,7 @@ export const StudentList: React.FC<StudentListProps> = ({
   students,
   selectedStudentId,
   onSelectStudent,
+  onTeacherObservationsChange,
   onGenerate,
   onRegenerate,
   onGenerateAll,
@@ -135,7 +139,7 @@ export const StudentList: React.FC<StudentListProps> = ({
         </div>
       </div>
 
-      <div className="flex-1 min-h-0 flex flex-col p-6 gap-4 overflow-hidden">
+      <div className="flex-1 min-h-0 overflow-y-auto p-6 flex flex-col gap-4">
         <div className="flex items-start gap-4 shrink-0">
           <ScoreBadge score={student.score} />
           <div>
@@ -155,19 +159,24 @@ export const StudentList: React.FC<StudentListProps> = ({
           </div>
         </div>
 
-        <div className="flex-1 min-h-0 flex flex-col gap-2">
-          <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider shrink-0">
-            Raw Notes
+        <TeacherObservationsPanel
+          observations={student.teacherObservations ?? createEmptyTeacherObservations()}
+          onChange={(observations) => onTeacherObservationsChange(student.id, observations)}
+        />
+
+        <div className="flex flex-col gap-2 shrink-0">
+          <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+            Gradebook Data
           </h4>
-          <div className="flex-1 min-h-0 overflow-y-auto rounded-lg border border-slate-200 bg-slate-50 p-4">
+          <div className="max-h-48 overflow-y-auto rounded-lg border border-slate-200 bg-slate-50 p-4">
             <p className="text-sm text-slate-600 italic leading-relaxed whitespace-pre-line">
               "{student.originalComments}"
             </p>
           </div>
         </div>
 
-        <div className="flex-1 min-h-0 flex flex-col gap-2 border-t border-slate-200 pt-4">
-          <div className="flex justify-between items-center gap-4 shrink-0">
+        <div className="flex flex-col gap-2 border-t border-slate-200 pt-4 shrink-0">
+          <div className="flex justify-between items-center gap-4">
             <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
               Generated Summary
             </h4>
@@ -201,7 +210,7 @@ export const StudentList: React.FC<StudentListProps> = ({
             </div>
           </div>
 
-          <div className="flex-1 min-h-0 overflow-y-auto rounded-lg border border-blue-100 bg-blue-50/50 p-4">
+          <div className="rounded-lg border border-blue-100 bg-blue-50/50 p-4 min-h-[8rem]">
             {student.status === 'generating' ? (
               <div className="flex items-center justify-center gap-2 text-blue-600 py-4">
                 <Loader2 className="w-5 h-5 animate-spin" />

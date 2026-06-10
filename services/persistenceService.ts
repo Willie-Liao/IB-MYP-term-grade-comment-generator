@@ -1,4 +1,5 @@
 import { CriterionKey, Student, Unit } from '../types';
+import { createEmptyTeacherObservations } from './teacherObservationScales';
 
 const STORAGE_KEY = 'termgenius-session';
 const VERSION = 1;
@@ -126,11 +127,19 @@ const deserializeUnits = (units: SerializedUnit[]): Unit[] =>
     ) as Record<CriterionKey, Unit['criteria'][CriterionKey]>,
   }));
 
-const normalizeStudentStatus = (student: Student): Student => {
-  if (student.status !== 'generating') return student;
-  return {
+const normalizeStudent = (student: Student): Student => {
+  const normalized: Student = {
     ...student,
-    status: student.generatedSummary?.trim() ? 'completed' : 'idle',
+    teacherObservations: {
+      ...createEmptyTeacherObservations(),
+      ...student.teacherObservations,
+    },
+  };
+
+  if (normalized.status !== 'generating') return normalized;
+  return {
+    ...normalized,
+    status: normalized.generatedSummary?.trim() ? 'completed' : 'idle',
   };
 };
 
@@ -148,7 +157,7 @@ export const loadSession = (): {
     if (data.version !== VERSION) return null;
 
     return {
-      students: (data.students ?? []).map(normalizeStudentStatus),
+      students: (data.students ?? []).map(normalizeStudent),
       units: data.units?.length ? deserializeUnits(data.units) : createDefaultUnits(),
       activeFile: data.activeFile ?? null,
       showConfig: data.showConfig ?? true,
@@ -172,7 +181,7 @@ export const saveSession = async (session: {
 
   const payload: PersistedSession = {
     version: VERSION,
-    students: session.students.map(normalizeStudentStatus),
+    students: session.students.map(normalizeStudent),
     units: await serializeUnits(session.units),
     activeFile: session.activeFile,
     showConfig: session.showConfig,
