@@ -1,4 +1,0 @@
-# file: /Users/willieliao/工作/JCID/Score and term grade/Comments generator/src/auth.py
-# hypothesis_version: 6.150.0
-
-[b'authenticity_token', 302, 303, 5000, '/login', 'Content-Type', 'Location', 'Login successful!', 'Referer', 'alert-danger', 'authenticity_token', 'content', 'csrf-token', 'div', 'error', 'form', 'login', 'lxml', 'meta', 'name', 'password', 'session']
