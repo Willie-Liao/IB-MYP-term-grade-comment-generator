@@ -1,4 +1,5 @@
 import { Student, Unit, CriterionKey } from "../types";
+import { extractDocumentText } from "./documentParserService";
 
 const MODEL_NAME = "MiniMax-M3";
 const DEFAULT_BASE_URL = "https://api.minimaxi.com/v1";
@@ -112,7 +113,7 @@ const parseMinimaxError = (response: Response, data: any): MinimaxError => {
 
 const readFileContent = async (file: File): Promise<string> => {
   try {
-    return await file.text();
+    return await extractDocumentText(file);
   } catch {
     return `[Attached File: ${file.name} - (Could not read content)]`;
   }
@@ -143,12 +144,7 @@ const buildUnitContextParts = async (units: Unit[]): Promise<ChatContentPart[]> 
       });
 
       if (crit.file) {
-        if (crit.file.type === "application/pdf") {
-          parts.push({
-            type: "text",
-            text: `  - Task Clarification File: ${crit.file.name} (PDF — rely on teacher notes above; PDF bytes are not sent to the model)\n`,
-          });
-        } else if (crit.file.type.startsWith("image/")) {
+        if (crit.file.type.startsWith("image/")) {
           parts.push({
             type: "text",
             text: `  - Task Clarification Image: ${crit.file.name} (use teacher notes — image bytes not sent)\n`,
