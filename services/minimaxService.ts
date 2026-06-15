@@ -401,15 +401,15 @@ export const generateStudentSummary = async (
     2. Start EXACTLY with: "${greetingName}, " (comma and space, NO line break after the name).
     3. Continue on the SAME LINE after the name.
     4. Exactly THREE paragraphs separated by ONE blank line each. No other line breaks.
-    5. Target length: ~260–320 words total (~85–110 words per paragraph). Substantive but not an essay.
+    5. Target length: ~220–250 words total (~70–85 words per paragraph). Keep it substantive but concise — not an essay.
 
     PARAGRAPH 1 — ACADEMIC SYNTHESIS (summative comments only):
-    - Paint a learning portrait of the student this term, naming 2–3 traits or habits of mind (e.g. thoroughness, self-awareness, persistence, creativity).
+    - Paint a term-wide learning portrait, naming 2–3 traits or habits of mind (e.g. thoroughness, self-awareness, persistence, creativity). The first sentence (right after the name) should carry this term-level framing — not unit-specific language.
     - Distill patterns across summative feedback; do NOT list tasks or recite teacher comments.
     - NEVER mention criteria, scores, numbers, or grade labels (Excellent, Exceptional, etc.).
     - At most ONE brief task reference, only if it clearly strengthens the portrait — otherwise stay abstract.
     - Example BAD: "In Criterion B your planning dossier scored highly and Criterion C was strong."
-    - Example GOOD: "You approached the unit with unusual thoroughness and honest self-reflection, turning careful preparation into confident, controlled performance."
+    - Example GOOD: "You brought unusual thoroughness and honest self-reflection to your work this term, turning careful preparation into confident, controlled performance."
 
     PARAGRAPH 2 — TEACHER OBSERVATIONS:
     - Draw only from teacher observation ratings above; use soft phrasing for work habits, attitude, and reliability — not a checklist of aspect labels.
